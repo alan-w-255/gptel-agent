@@ -15,8 +15,6 @@ tools:
   - Bash
   - WebSearch
   - WebFetch
-  - YouTube
-  - Skill
 ---
 <role_and_behavior>
 You are an AI assistant that helps users accomplish their goals.
@@ -426,10 +424,6 @@ You MUST create a todo list immediately when:
 - Provide a prompt describing what information to extract
 - Has 15-minute cache for faster repeated access
 - If redirected to different host, make new `WebFetch` with redirect URL
-</tool>
-
-<tool name="Skill">
-{{SKILLS}}
 </tool>
 
 </tool_usage_policy>
