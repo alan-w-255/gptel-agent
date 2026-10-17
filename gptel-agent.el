@@ -216,6 +216,17 @@ Returns an alist of (agent-name . file-path)."
           gptel-agent-dirs)
     agent-files))
 
+(defun gptel-agent--project-root ()
+  "Return the root of the current project, or nil.
+
+Unlike calling `project-root' directly, this never signals an error:
+any member of `project-find-functions' can fail, for example when it
+belongs to a package that is not loaded yet."
+  (when-let* ((proj (ignore-errors (project-current)))
+              (root (ignore-errors (project-root proj)))
+              ((not (equal root default-directory))))
+    root))
+
 (defun gptel-agent--update-skills ()
   "Update the known skills list from `gptel-agent-skill-dirs'."
   (setq gptel-agent--skills nil)
@@ -234,10 +245,7 @@ Returns an alist of (agent-name . file-path)."
         ;; To preserve precedence, the list should be reversed and resolved
         ;; relative names should be at the end.
         (cl-loop for dir in gptel-agent-skill-dirs
-                 with project-root = (and-let* ((proj (project-current))
-                                                (root (project-root proj))
-                                                (_ (not (equal root default-directory))))
-                                       root)
+                 with project-root = (gptel-agent--project-root)
                  if (file-name-absolute-p dir)
                  collect dir into absolute-dirs
                  else
@@ -298,9 +306,10 @@ AGENT-SKILLS is a alist of skill names and associated plist as value
           (setf (alist-get name gptel-agent--agents nil t #'equal)
                 (cdr (gptel-agent-read-file agent-file templates)))))))
 
-  ;; Update the enum for Agent tool
-  (setf (plist-get (car (gptel-tool-args (gptel-get-tool "Agent"))) :enum)
-        (vconcat (delete "gptel-agent" (mapcar #'car gptel-agent--agents))))
+  ;; Update the enum for Agent tool, if it is available
+  (when-let* ((agent-tool (ignore-errors (gptel-get-tool "Agent"))))
+    (setf (plist-get (car (gptel-tool-args agent-tool)) :enum)
+          (vconcat (delete "gptel-agent" (mapcar #'car gptel-agent--agents)))))
 
   ;; Register the top-level agent presets if they exist
   (dolist (agent-name gptel-agent--top-level-agents)
