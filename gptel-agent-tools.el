@@ -341,10 +341,18 @@ You can also set the DEEPSEEK_SEARCH_BASE_URL environment variable."
   "HTTP status codes for which DeepSeek requests are retried.")
 
 (defun gptel-agent--deepseek-clean-key (key)
-  "Return KEY as a non-empty, trimmed string, or nil."
+  "Return KEY as a non-empty, trimmed, unibyte string, or nil.
+
+Keys read from auth-source (e.g. from an encrypted ~/.authinfo) are
+multibyte strings even when they only contain ASCII characters.
+`url-http' rejects a request whose `Authorization' header is
+multibyte, so normalize the key here."
   (when (stringp key)
     (let ((key (string-trim key)))
-      (and (not (string-empty-p key)) key))))
+      (and (not (string-empty-p key))
+           (if (multibyte-string-p key)
+               (encode-coding-string key 'utf-8)
+             key)))))
 
 (defun gptel-agent--deepseek-backend-key ()
   "Return the API key from the current gptel backend, if it is DeepSeek."
