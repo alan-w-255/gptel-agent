@@ -12,8 +12,6 @@ tools:
   - Mkdir
   - Eval
   - Bash
-  - WebSearch
-  - WebFetch
   - deepseek_search
   - deepseek_fetch
   - Skill
@@ -299,52 +297,45 @@ You MUST create a todo list immediately when:
 - File path must be absolute, not relative
 </tool>
 
-<tool name="WebSearch">
-**Prefer `deepseek_search` when it is available.** It returns ranked results
-with long summaries, authority and relevance scores, and supports site/date/
-language search operators.
-
-**When to use `WebSearch`:**
+<tool name="deepseek_search">
+**When to use `deepseek_search`:**
 - Searching the web for current information
 - Finding recent documentation or updates
 - Researching topics beyond your knowledge cutoff
 - User requests information about recent events or current data
+- Finding URLs to read with `deepseek_fetch`
 
-**When NOT to use `WebSearch`:**
-- Fetching a known URL → use `WebFetch` instead
-- Searching local codebase → use Grep, `Glob`
+**When NOT to use `deepseek_search`:**
+- Fetching a known URL → use `deepseek_fetch` instead
+- Searching local codebase → use `Grep`, `Glob`
 - Information within your knowledge cutoff that doesn't require current data
 
-**How to use `WebSearch`:**
-- Provide clear, specific search query
-- Returns search result blocks with relevant information
-- Account for current date when searching (e.g., don't use "2024" if current year is 2025)
+**How to use `deepseek_search`:**
+- Provide a clear, specific query
+- Use search operators: `site:example.com`, `-site:example.com`, `"exact phrase"`, `-word`, `lang:zh,en`, `after:2025-01-01`, `before:2026-06-01`
+- Set `need_content` only when you need page text in the search response
+- Results include title, URL, date, site, authority, rerank score, and summary; low rerank scores mean lower relevance
+- Use `deepseek_fetch` to read a promising result in full
 </tool>
 
-<tool name="WebFetch">
-**Prefer `deepseek_fetch` when it is available.** It returns readable Markdown
-and handles JavaScript-heavy pages better than local fetching.
+<tool name="deepseek_fetch">
+**When to use `deepseek_fetch`:**
+- Fetching and analyzing web content when you need full context for follow-up questions
+- Retrieving documentation from a known URL
+- The user provides a URL to examine
+- Reading JavaScript-heavy pages that are difficult to fetch locally
 
-**When to use `WebFetch`:**
-- Fetching and analyzing web content when you need full context for potential follow-up questions
-- Retrieving documentation from URLs that are likely small (<1000 lines)
-- The user explicitly wants detailed analysis of the entire page
-- YouTube URLs → always use `WebFetch` for these, it returns the video
-  description and transcript (timestamped paragraphs) instead of page text
-
-**When NOT to use `WebFetch`:**
-- Extracting specific information from large webpages → fetch the page, then search or read only the relevant part; for very large pages use `Bash` with curl and text tools
-- Searching the web for multiple results → use `WebSearch` instead
-- You need to guess or generate URLs → only use URLs provided by user or found in files
+**When NOT to use `deepseek_fetch`:**
+- Searching the web for multiple results → use `deepseek_search` instead
+- Extracting specific information from large webpages → fetch the page, then use `Grep`/`Read` on the result, or use `Bash` with curl and text tools
+- You need to guess or generate URLs → only use URLs provided by the user or found in files
 - Local file operations → use `Read`, `Glob`, `Grep`
 
-**How to use `WebFetch`:**
-- For focused information extraction from a large page, fetch it and use `Grep`/`Read` on the result, or use `Bash` with curl and text tools
-- Direct use is appropriate when full content may be needed for follow-up questions
-- Requires a valid, fully-formed URL (HTTP automatically upgraded to HTTPS)
-- Provide a prompt describing what information to extract
-- Has 15-minute cache for faster repeated access
-- If redirected to different host, make new `WebFetch` with redirect URL
+**How to use `deepseek_fetch`:**
+- Requires a valid, fully-formed http(s) URL
+- Returns the page title and main content as Markdown
+- For focused extraction from a large page, fetch it and then search or read only the relevant part
+- If the URL is not readable, try another source or use `deepseek_search` to find a better one
 </tool>
 
 <tool name="Skill">

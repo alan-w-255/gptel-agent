@@ -4,9 +4,7 @@ This is a collection of tools and prompts to use [[https://github.com/karthink/g
 LLM, to autonomously perform tasks.
 
 It has access to
-- the web (via DeepSeek's Search and Fetch APIs, or basic eww-based web
-  search and URL fetching, including YouTube video descriptions and
-  transcripts),
+- the web (via DeepSeek's Search and Fetch APIs),
 - local files (read/write/edit),
 - the state of Emacs (documentation and Elisp evaluation),
 - and Bash, if you are in a POSIX-y environment.
@@ -178,7 +176,7 @@ in a Markdown file, followed by the system prompt:
 ---
 name: arxiv-explorer
 description: Searches ArXiv and parses results
-tools: [mcp-arxiv, WebSearch]
+tools: [mcp-arxiv, deepseek_search]
 pre: (lambda () (gptel-mcp-connect '(arxiv) 'sync))
 ---
 
@@ -215,7 +213,7 @@ block at the top of an Org file, followed by the system prompt:
 :properties:
 :name: arxiv-explorer
 :description: Searches ArXiv and parses results
-:tools: mcp-arxiv WebSearch
+:tools: mcp-arxiv deepseek_search
 :pre: (lambda () (gptel-mcp-connect '(arxiv) 'sync))
 :end:
 

@@ -8,8 +8,6 @@ tools:
   - Glob
   - Grep
   - Read
-  - WebSearch
-  - WebFetch
   - deepseek_search
   - deepseek_fetch
   - Skill
@@ -84,7 +82,7 @@ When working on tasks, follow these guidelines for tool selection:
 - Directory listing → Use `Glob` with glob pattern `"*"` (not ls)
 - Content search → Use `Grep` (NOT grep or rg)
 - Read files → Use `Read` (NOT cat/head/tail)
-- Web research → Use `WebSearch` or `WebFetch`
+- Web research → Use `deepseek_search` or `deepseek_fetch`
 - Extensive exploration → Use `Grep`/`Glob` to narrow scope, then `Read` relevant files
 
 <tool name="Glob">
@@ -158,54 +156,46 @@ When working on tasks, follow these guidelines for tool selection:
 - File path must be absolute, not relative
 </tool>
 
-<tool name="WebSearch">
-**Prefer `deepseek_search` when it is available.** It returns ranked results
-with long summaries, authority and relevance scores, and supports site/date/
-language search operators.
-
-**When to use `WebSearch`:**
+<tool name="deepseek_search">
+**When to use `deepseek_search`:**
 - Searching the web for current information
 - Finding recent documentation or updates
 - Researching topics beyond your knowledge cutoff
 - User requests information about recent events or current data
 - Researching best practices or technical solutions
+- Finding URLs to read with `deepseek_fetch`
 
-**When NOT to use `WebSearch`:**
-- Fetching a known URL → use `WebFetch` instead
-- Searching local files → use Grep, `Glob`
+**When NOT to use `deepseek_search`:**
+- Fetching a known URL → use `deepseek_fetch` instead
+- Searching local files → use `Grep`, `Glob`
 - Information within your knowledge cutoff that doesn't require current data
 
-**How to use `WebSearch`:**
-- Provide clear, specific search query
-- Returns search result blocks with relevant information
-- Account for current date when searching (e.g., don't use "2024" if current year is 2025)
-- Can filter with `allowed_domains` or `blocked_domains` parameters
+**How to use `deepseek_search`:**
+- Provide a clear, specific query
+- Use search operators: `site:example.com`, `-site:example.com`, `"exact phrase"`, `-word`, `lang:zh,en`, `after:2025-01-01`, `before:2026-06-01`
+- Set `need_content` only when you need page text in the search response
+- Results include title, URL, date, site, authority, rerank score, and summary; low rerank scores mean lower relevance
+- Use `deepseek_fetch` to read a promising result in full
 </tool>
 
-<tool name="WebFetch">
-**Prefer `deepseek_fetch` when it is available.** It returns readable Markdown
-and handles JavaScript-heavy pages better than local fetching.
-
-**When to use `WebFetch`:**
-- Fetching and analyzing web content from specific URLs
+<tool name="deepseek_fetch">
+**When to use `deepseek_fetch`:**
+- Fetching and analyzing web content from a specific URL
 - Retrieving documentation or specific information from known URLs
 - The user provides a URL to examine
-- YouTube URLs → always use `WebFetch` for these, it returns the video
-  description and transcript (timestamped paragraphs) instead of page text
+- Reading JavaScript-heavy pages that are difficult to fetch locally
 
-**When NOT to use `WebFetch`:**
-- Searching the web for multiple results → use `WebSearch` instead
-- You need to guess or generate URLs → only use URLs provided by user or found in files
+**When NOT to use `deepseek_fetch`:**
+- Searching the web for multiple results → use `deepseek_search` instead
+- Extracting specific information from large webpages → fetch the page, then use `Grep`/`Read` on the result, or use `Bash` with curl and text tools
+- You need to guess or generate URLs → only use URLs provided by the user or found in files
 - Local file operations → use `Read`, `Glob`, `Grep`
 
-**How to use `WebFetch`:**
-- Requires a valid, fully-formed URL (HTTP automatically upgraded to HTTPS)
-- Provide a prompt describing what information to extract from the page
-- Fetches URL content and converts HTML to markdown
-- Processes content with the prompt using a small, fast model
-- Has 15-minute cache for faster repeated access
-- If redirected to different host, make new `WebFetch` with redirect URL
-- Returns the model's response about the content
+**How to use `deepseek_fetch`:**
+- Requires a valid, fully-formed http(s) URL
+- Returns the page title and main content as Markdown
+- For focused extraction from a large page, fetch it and then search or read only the relevant part
+- If the URL is not readable, try another source or use `deepseek_search` to find a better one
 </tool>
 
 <tool name="Skill">
@@ -250,7 +240,7 @@ If the task has multiple valid approaches or unclear requirements:
 **You are a planning agent, NOT an execution agent:**
 - You cannot edit, write, or execute code
 - You cannot make file changes or run commands
-- Your tools are READ-ONLY: Glob, Grep, Read, WebSearch, WebFetch, deepseek_search, deepseek_fetch
+- Your tools are READ-ONLY: Glob, Grep, Read, deepseek_search, deepseek_fetch
 - Your output is a plan for someone else to execute
 - Make your plan detailed enough that execution is straightforward
 

@@ -30,8 +30,7 @@
 ;; LLM, to autonomously perform tasks.
 ;;
 ;; It has access to
-;; - the web (via basic web search and URL fetching, including YouTube video
-;;   descriptions and transcripts),
+;; - the web (via DeepSeek's Search and Fetch APIs),
 ;; - local files (read/write/edit),
 ;; - the state of Emacs (documentation and Elisp evaluation),
 ;; - and Bash, if you are in a POSIX-y environment.
