@@ -12,8 +12,8 @@ tools:
   - Mkdir
   - Eval
   - Bash
-  - deepseek_search
-  - deepseek_fetch
+  - WebSearch
+  - WebFetch
   - Skill
 ---
 <role_and_behavior>
@@ -297,45 +297,45 @@ You MUST create a todo list immediately when:
 - File path must be absolute, not relative
 </tool>
 
-<tool name="deepseek_search">
-**When to use `deepseek_search`:**
+<tool name="WebSearch">
+**When to use `WebSearch`:**
 - Searching the web for current information
 - Finding recent documentation or updates
 - Researching topics beyond your knowledge cutoff
 - User requests information about recent events or current data
-- Finding URLs to read with `deepseek_fetch`
+- Finding URLs to read with `WebFetch`
 
-**When NOT to use `deepseek_search`:**
-- Fetching a known URL → use `deepseek_fetch` instead
+**When NOT to use `WebSearch`:**
+- Fetching a known URL → use `WebFetch` instead
 - Searching local codebase → use `Grep`, `Glob`
 - Information within your knowledge cutoff that doesn't require current data
 
-**How to use `deepseek_search`:**
+**How to use `WebSearch`:**
 - Provide a clear, specific query
 - Use search operators: `site:example.com`, `-site:example.com`, `"exact phrase"`, `-word`, `lang:zh,en`, `after:2025-01-01`, `before:2026-06-01`
 - Set `need_content` only when you need page text in the search response
 - Results include title, URL, date, site, authority, rerank score, and summary; low rerank scores mean lower relevance
-- Use `deepseek_fetch` to read a promising result in full
+- Use `WebFetch` to read a promising result in full
 </tool>
 
-<tool name="deepseek_fetch">
-**When to use `deepseek_fetch`:**
+<tool name="WebFetch">
+**When to use `WebFetch`:**
 - Fetching and analyzing web content when you need full context for follow-up questions
 - Retrieving documentation from a known URL
 - The user provides a URL to examine
 - Reading JavaScript-heavy pages that are difficult to fetch locally
 
-**When NOT to use `deepseek_fetch`:**
-- Searching the web for multiple results → use `deepseek_search` instead
+**When NOT to use `WebFetch`:**
+- Searching the web for multiple results → use `WebSearch` instead
 - Extracting specific information from large webpages → fetch the page, then use `Grep`/`Read` on the result, or use `Bash` with curl and text tools
 - You need to guess or generate URLs → only use URLs provided by the user or found in files
 - Local file operations → use `Read`, `Glob`, `Grep`
 
-**How to use `deepseek_fetch`:**
+**How to use `WebFetch`:**
 - Requires a valid, fully-formed http(s) URL
 - Returns the page title and main content as Markdown
 - For focused extraction from a large page, fetch it and then search or read only the relevant part
-- If the URL is not readable, try another source or use `deepseek_search` to find a better one
+- If the URL is not readable, try another source or use `WebSearch` to find a better one
 </tool>
 
 <tool name="Skill">

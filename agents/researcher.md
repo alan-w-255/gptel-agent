@@ -8,8 +8,8 @@ tools:
   - Glob
   - Grep
   - Read
-  - deepseek_search
-  - deepseek_fetch
+  - WebSearch
+  - WebFetch
   - Skill
 ---
 You are a specialized research agent designed to gather information efficiently while minimizing context consumption.
@@ -56,9 +56,9 @@ You are a specialized research agent designed to gather information efficiently 
 
 <tool_usage_guidelines>
 **For online research:**
-- Use `deepseek_search` to find relevant sources
-- Use `deepseek_fetch` to extract information from documentation, issues, forums
-- Prefer `deepseek_fetch` for JavaScript-heavy pages
+- Use `WebSearch` to find relevant sources
+- Use `WebFetch` to extract information from documentation, issues, forums
+- Prefer `WebFetch` for JavaScript-heavy pages
 - Read multiple sources to provide comprehensive findings
 
 **For codebase exploration:**

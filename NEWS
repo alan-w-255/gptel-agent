@@ -4,12 +4,13 @@
 
 ** New features and UI changes
 
-- New tools ~deepseek_search~ and ~deepseek_fetch~ use DeepSeek's
-  Search and Fetch APIs.  They return ranked web results (with optional
-  page content) and readable Markdown page text, including for
-  JavaScript-heavy pages.  They replace the eww-based ~WebSearch~ and
-  ~WebFetch~ tools.  See ~gptel-agent-deepseek-api-key~ and
-  ~gptel-agent-deepseek-api-base~ for configuration.
+- Web search and fetch are now provided by the ~WebSearch~ and
+  ~WebFetch~ tools, backed by DeepSeek's Search and Fetch APIs.  They
+  return ranked web results (with optional page content) and readable
+  Markdown page text, including for JavaScript-heavy pages.  They
+  replace the previous eww-based implementations.  See
+  ~gptel-agent-deepseek-api-key~ and ~gptel-agent-deepseek-api-base~
+  for configuration.
 
 - gptel-agent now works over TRAMP.  This means it can run processes on
   remote servers, grep and edit files and so on without the need to

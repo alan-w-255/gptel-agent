@@ -9,7 +9,7 @@ It has access to
 - the state of Emacs (documentation and Elisp evaluation),
 - and Bash, if you are in a POSIX-y environment.
 
-The =deepseek_search= and =deepseek_fetch= tools use DeepSeek's web APIs.
+The =WebSearch= and =WebFetch= tools use DeepSeek's web APIs.
 They need a DeepSeek API key, which is looked up from
 =gptel-agent-deepseek-api-key=, the =DEEPSEEK_API_KEY= environment
 variable, the current DeepSeek =gptel= backend, or an auth-source entry
@@ -176,7 +176,7 @@ in a Markdown file, followed by the system prompt:
 ---
 name: arxiv-explorer
 description: Searches ArXiv and parses results
-tools: [mcp-arxiv, deepseek_search]
+tools: [mcp-arxiv, WebSearch]
 pre: (lambda () (gptel-mcp-connect '(arxiv) 'sync))
 ---
 
@@ -213,7 +213,7 @@ block at the top of an Org file, followed by the system prompt:
 :properties:
 :name: arxiv-explorer
 :description: Searches ArXiv and parses results
-:tools: mcp-arxiv deepseek_search
+:tools: mcp-arxiv WebSearch
 :pre: (lambda () (gptel-mcp-connect '(arxiv) 'sync))
 :end:
 

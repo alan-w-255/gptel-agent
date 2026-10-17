@@ -25,8 +25,8 @@
 ;; - "Bash"           : Execute a Bash command.
 ;;
 ;; Web:
-;; - "deepseek_search" : Search the web with DeepSeek's search engine.
-;; - "deepseek_fetch"  : Fetch a URL as Markdown with DeepSeek's fetch API.
+;; - "WebSearch" : Search the web with DeepSeek's search engine.
+;; - "WebFetch"  : Fetch a URL as Markdown with DeepSeek's fetch API.
 ;;
 ;; Filesystem:
 ;; - "Mkdir"  : Create a new directory.
@@ -305,7 +305,7 @@ COMMAND is the bash command string to execute."
 
 ;;; DeepSeek web search and fetch
 (defcustom gptel-agent-deepseek-api-key nil
-  "DeepSeek API key used by the `deepseek_search' and `deepseek_fetch' tools.
+  "DeepSeek API key used by the `WebSearch' and `WebFetch' tools.
 
 When nil, the key is looked up from these sources in order:
 - the DEEPSEEK_API_KEY environment variable,
@@ -323,7 +323,7 @@ You can also set the DEEPSEEK_SEARCH_BASE_URL environment variable."
   :group 'gptel-agent)
 
 (defconst gptel-agent--deepseek-timeout 30
-  "Timeout in seconds for a DeepSeek Search or Fetch request.")
+  "Timeout in seconds for a WebSearch or WebFetch request.")
 
 (defconst gptel-agent--deepseek-max-retries 2
   "Maximum number of retries for transient DeepSeek API errors.")
@@ -579,7 +579,7 @@ DeepSeek gptel backend, or add an auth-source entry for \
 (defun gptel-agent--deepseek-format-search (query results)
   "Format DeepSeek search RESULTS for QUERY as Markdown."
   (if (null results)
-      (format "DeepSeek Search: no results for \"%s\".  Try a broader query, remove site:/after:/before: operators, or use English keywords."
+      (format "WebSearch: no results for \"%s\".  Try a broader query, remove site:/after:/before: operators, or use English keywords."
               query)
     (let ((sections nil)
           (total 0)
@@ -619,7 +619,7 @@ DeepSeek gptel backend, or add an auth-source entry for \
             (let ((clip (gptel-agent--deepseek-clip
                          content gptel-agent--deepseek-max-result-chars)))
               (push (if (cdr clip)
-                        (format "Content (truncated from %d chars; use deepseek_fetch for the full page):\n%s"
+                        (format "Content (truncated from %d chars; use WebFetch for the full page):\n%s"
                                 (length content) (car clip))
                       (concat "Content:\n" (car clip)))
                     lines)))
@@ -638,7 +638,7 @@ DeepSeek gptel backend, or add an auth-source entry for \
         (push (format "Note: the best rerank score is %.2f (< 1.5), so relevance may be low.  Consider more specific keywords, English terms, or fewer search operators."
                       best-rerank)
               sections))
-      (concat (format "DeepSeek Search: \"%s\" (%d result%s)\n\n"
+      (concat (format "WebSearch: \"%s\" (%d result%s)\n\n"
                       query (length results)
                       (if (= (length results) 1) "" "s"))
               (string-join sections "\n\n")))))
@@ -679,7 +679,7 @@ address used to prefer localized results."
               (content (or (plist-get data :content) "")))
          (if (string-empty-p content)
              (funcall callback
-                      (format "deepseek_fetch: fetched %s but no main content was extracted (title: %s).  Try another source."
+                      (format "WebFetch: fetched %s but no main content was extracted (title: %s).  Try another source."
                               url (if (string-empty-p title) "none" title)))
            (let ((clip (gptel-agent--deepseek-clip
                         content gptel-agent--deepseek-max-total-chars)))
@@ -1718,7 +1718,7 @@ demonstrate something to the user."
  :include t)
 
 (gptel-make-tool
- :name "deepseek_search"
+ :name "WebSearch"
  :function #'gptel-agent--deepseek-search
  :description "Search the web with DeepSeek's search engine and return ranked results.
 
@@ -1731,7 +1731,7 @@ The query supports search operators:
 - lang:zh,en (limit by language)
 - after:2025-01-01 and before:2026-06-01 (limit by publication date)
 
-Use `deepseek_fetch' to read a promising result in full.  This tool requires a DeepSeek API key, see `gptel-agent-deepseek-api-key'."
+Use `WebFetch' to read a promising result in full.  This tool requires a DeepSeek API key, see `gptel-agent-deepseek-api-key'."
  :args '((:name "query"
                 :type string
                 :description "Search query, 1-128 characters.  Supports site:, -site:, -word, \"phrase\", lang:, after: and before:.")
@@ -1756,7 +1756,7 @@ Use `deepseek_fetch' to read a promising result in full.  This tool requires a D
  :include t)
 
 (gptel-make-tool
- :name "deepseek_fetch"
+ :name "WebFetch"
  :function #'gptel-agent--deepseek-fetch
  :description "Fetch a single web page through DeepSeek and return its title and main content as Markdown.
 
