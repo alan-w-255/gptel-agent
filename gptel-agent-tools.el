@@ -28,6 +28,8 @@
 ;; - "WebSearch" : Search the web for the first five results to a query.
 ;; - "WebFetch"  : Fetch and read the contents of a URL, and for
 ;;                 YouTube URLs get the video description and transcript.
+;; - "deepseek_search" : Search the web with DeepSeek's search engine.
+;; - "deepseek_fetch"  : Fetch a URL as Markdown with DeepSeek's fetch API.
 ;;
 ;; Filesystem:
 ;; - "Mkdir"  : Create a new directory.
@@ -46,6 +48,8 @@
 (require 'eww)
 (require 'url-http)
 (require 'mail-utils)
+(require 'json)
+(require 'auth-source nil t)
 (eval-when-compile (require 'cl-lib))
 
 (declare-function org-escape-code-in-region "org-src")
@@ -624,6 +628,394 @@ Call CALLBACK with formatted result containing DESCRIPTION and transcript."
                                   (or description "No description available.")
                                   (or formatted-transcript "Error parsing transcript."))))))
            (list callback description)))))))
+
+;;; DeepSeek web search and fetch
+(defcustom gptel-agent-deepseek-api-key nil
+  "DeepSeek API key used by the `deepseek_search' and `deepseek_fetch' tools.
+
+When nil, the key is looked up from these sources in order:
+- the DEEPSEEK_API_KEY environment variable,
+- the current gptel backend, if it points to DeepSeek,
+- auth-source for the host \"api.deepseek.com\"."
+  :type '(choice (const :tag "Look up automatically" nil)
+                 (string :tag "API key"))
+  :group 'gptel-agent)
+
+(defcustom gptel-agent-deepseek-api-base "https://api.deepseek.com"
+  "Base URL for DeepSeek's Search and Fetch APIs.
+
+You can also set the DEEPSEEK_SEARCH_BASE_URL environment variable."
+  :type 'string
+  :group 'gptel-agent)
+
+(defconst gptel-agent--deepseek-timeout 30
+  "Timeout in seconds for a DeepSeek Search or Fetch request.")
+
+(defconst gptel-agent--deepseek-max-retries 2
+  "Maximum number of retries for transient DeepSeek API errors.")
+
+(defconst gptel-agent--deepseek-retry-delay 0.5
+  "Initial retry delay in seconds for DeepSeek API requests.")
+
+(defconst gptel-agent--deepseek-max-result-chars 6000
+  "Maximum number of characters of page content to include per search result.")
+
+(defconst gptel-agent--deepseek-max-total-chars 60000
+  "Maximum total number of characters returned by a DeepSeek tool.")
+
+(defconst gptel-agent--deepseek-retryable-statuses '(408 429 500 502 503 504)
+  "HTTP status codes for which DeepSeek requests are retried.")
+
+(defun gptel-agent--deepseek-clean-key (key)
+  "Return KEY as a non-empty, trimmed string, or nil."
+  (when (stringp key)
+    (let ((key (string-trim key)))
+      (and (not (string-empty-p key)) key))))
+
+(defun gptel-agent--deepseek-backend-key ()
+  "Return the API key from the current gptel backend, if it is DeepSeek."
+  (when (and (boundp 'gptel-backend) gptel-backend
+             (fboundp 'gptel-backend-host))
+    (let ((host (ignore-errors (gptel-backend-host gptel-backend))))
+      (when (and (stringp host) (string-match-p "deepseek" host))
+        (ignore-errors
+          (gptel-agent--deepseek-clean-key
+           (if (fboundp 'gptel--get-api-key)
+               (gptel--get-api-key)
+             (let ((key (gptel-backend-key gptel-backend)))
+               (cond ((functionp key) (funcall key))
+                     ((symbolp key) (symbol-value key))
+                     (t key))))))))))
+
+(defun gptel-agent--deepseek-api-key ()
+  "Return the DeepSeek API key, or nil if it cannot be found."
+  (or (gptel-agent--deepseek-clean-key gptel-agent-deepseek-api-key)
+      (gptel-agent--deepseek-clean-key (getenv "DEEPSEEK_API_KEY"))
+      (gptel-agent--deepseek-backend-key)
+      (ignore-errors
+        (when-let* ((entry (car (auth-source-search
+                                 :host "api.deepseek.com"
+                                 :require '(:secret))))
+                    (secret (plist-get entry :secret)))
+          (gptel-agent--deepseek-clean-key
+           (if (functionp secret) (funcall secret) secret))))))
+
+(defun gptel-agent--deepseek-base-url ()
+  "Return the base URL for DeepSeek API requests, without a trailing slash."
+  (let* ((env (getenv "DEEPSEEK_SEARCH_BASE_URL"))
+         (base (or (and (stringp gptel-agent-deepseek-api-base)
+                        (not (string-empty-p
+                              (string-trim gptel-agent-deepseek-api-base)))
+                        (string-trim gptel-agent-deepseek-api-base))
+                   (and (stringp env)
+                        (not (string-empty-p (string-trim env)))
+                        (string-trim env))
+                   "https://api.deepseek.com")))
+    (string-trim-right base "/+")))
+
+(defun gptel-agent--deepseek-http-status ()
+  "Return the HTTP status code in the current response buffer, or 0."
+  (save-excursion
+    (goto-char (point-min))
+    (if (re-search-forward "^HTTP/[0-9.]+[ \t]+\\([0-9]+\\)" nil t)
+        (string-to-number (match-string 1))
+      0)))
+
+(defun gptel-agent--deepseek-response-body ()
+  "Return the body of the current HTTP response buffer."
+  (let ((start (or (and (boundp 'url-http-end-of-headers)
+                        url-http-end-of-headers)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (if (re-search-forward "\r?\n\r?\n" nil t)
+                         (point)
+                       (point-min))))))
+    (buffer-substring-no-properties start (point-max))))
+
+(defun gptel-agent--deepseek-parse-json (string)
+  "Parse JSON STRING into a plist, or return nil if STRING is empty."
+  (and (stringp string)
+       (not (string-empty-p (string-trim string)))
+       (json-parse-string string
+                          :object-type 'plist
+                          :array-type 'list
+                          :null-object nil
+                          :false-object :json-false)))
+
+(defun gptel-agent--deepseek-status-description (status)
+  "Return a human-readable description for HTTP STATUS."
+  (pcase status
+    (400 "invalid request")
+    (401 "missing or invalid API key")
+    (402 "insufficient account balance")
+    (403 "request blocked by a safety policy")
+    (404 "no usable page content could be fetched")
+    (408 "request body read timed out")
+    (413 "request body too large")
+    (429 "DeepSeek QPS limit exceeded")
+    (500 "DeepSeek internal server error")
+    (502 "bad gateway")
+    (503 "service unavailable")
+    (504 "downstream request timed out")
+    (_ (format "HTTP %d" status))))
+
+(defun gptel-agent--deepseek-error-message (status body)
+  "Return an error message for DeepSeek HTTP STATUS and response BODY."
+  (let* ((data (ignore-errors (gptel-agent--deepseek-parse-json body)))
+         (err (plist-get data :error))
+         (message (plist-get err :message))
+         (code (plist-get err :code)))
+    (concat
+     (format "Error: DeepSeek API request failed (HTTP %d%s): %s"
+             status
+             (if (stringp code) (format ", %s" code) "")
+             (if (and (stringp message) (not (string-empty-p message)))
+                 message
+               (gptel-agent--deepseek-status-description status)))
+     (if (>= status 500)
+         "\nThe DeepSeek service may be temporarily unavailable; retry later or try a different source."
+       ""))))
+
+(defun gptel-agent--deepseek-retry (path body callback attempt)
+  "Retry a DeepSeek request after an exponential backoff delay."
+  (run-at-time (* gptel-agent--deepseek-retry-delay (expt 2 attempt))
+               nil #'gptel-agent--deepseek-post
+               path body callback (1+ attempt)))
+
+(defun gptel-agent--deepseek-handle-response (path body callback attempt status)
+  "Handle a DeepSeek response for PATH, BODY and CALLBACK.
+ATTEMPT is the current retry attempt.  STATUS is the `url-retrieve'
+status plist.  Runs in the response buffer."
+  (let ((network-error (plist-get status :error))
+        (status-code (gptel-agent--deepseek-http-status)))
+    (cond
+     ;; Connection-level failure: no HTTP response at all.
+     ((and network-error (zerop status-code))
+      (if (< attempt gptel-agent--deepseek-max-retries)
+          (gptel-agent--deepseek-retry path body callback attempt)
+        (funcall callback
+                 (format "Error: DeepSeek request failed: %s"
+                         (error-message-string network-error))
+                 nil)))
+     ((and (>= status-code 200) (< status-code 300))
+      (condition-case errdata
+          (funcall callback nil
+                   (gptel-agent--deepseek-parse-json
+                    (gptel-agent--deepseek-response-body)))
+        (error
+         (funcall callback
+                  (format "Error: Could not parse DeepSeek response: %s"
+                          (error-message-string errdata))
+                  nil))))
+     ((memq status-code gptel-agent--deepseek-retryable-statuses)
+      (if (< attempt gptel-agent--deepseek-max-retries)
+          (gptel-agent--deepseek-retry path body callback attempt)
+        (funcall callback
+                 (gptel-agent--deepseek-error-message
+                  status-code (gptel-agent--deepseek-response-body))
+                 nil)))
+     (t
+      (funcall callback
+               (gptel-agent--deepseek-error-message
+                status-code (gptel-agent--deepseek-response-body))
+               nil)))))
+
+(defun gptel-agent--deepseek-post (path body callback &optional attempt)
+  "POST BODY as JSON to DeepSeek API PATH.
+
+Call CALLBACK with two arguments, an error string or nil, followed by
+the parsed JSON response.  Retry transient network and HTTP errors up
+to `gptel-agent--deepseek-max-retries' times."
+  (let* ((attempt (or attempt 0))
+         (key (gptel-agent--deepseek-api-key))
+         (url (concat (gptel-agent--deepseek-base-url) path)))
+    (if (not key)
+        (funcall callback
+                 "Error: DeepSeek API key not found.  Set \
+`gptel-agent-deepseek-api-key', set DEEPSEEK_API_KEY, configure a \
+DeepSeek gptel backend, or add an auth-source entry for \
+\"api.deepseek.com\"."
+                 nil)
+      (let* ((buf (generate-new-buffer " *gptel-agent-deepseek*"))
+             (done nil)
+             (timer nil)
+             (url-request-method "POST")
+             (url-request-extra-headers
+              `(("Authorization" . ,(concat "Bearer " key))
+                ("Content-Type" . "application/json")
+                ("Accept" . "application/json")))
+             (url-request-data
+              (encode-coding-string (json-encode body) 'utf-8))
+             (url-request-noninteractive t)
+             (inherit-process-coding-system t))
+        (setq timer
+              (run-at-time
+               gptel-agent--deepseek-timeout nil
+               (lambda ()
+                 (unless done
+                   (setq done t)
+                   (when (buffer-live-p buf) (kill-buffer buf))
+                   (funcall callback
+                            (format "Error: DeepSeek request timed out after %d seconds."
+                                    gptel-agent--deepseek-timeout)
+                            nil)))))
+        (condition-case errdata
+            (url-retrieve
+             url
+             (lambda (status)
+               (unless done
+                 (setq done t)
+                 (when timer (cancel-timer timer))
+                 (unwind-protect
+                     (condition-case errdata
+                         (gptel-agent--deepseek-handle-response
+                          path body callback attempt status)
+                       (error
+                        (funcall callback
+                                 (format "Error: Could not process DeepSeek response: %s"
+                                         (error-message-string errdata))
+                                 nil)))
+                   (when (buffer-live-p buf) (kill-buffer buf)))))
+             nil 'silent)
+          (error
+           (unless done
+             (setq done t)
+             (when timer (cancel-timer timer))
+             (when (buffer-live-p buf) (kill-buffer buf))
+             (funcall callback
+                      (format "Error: DeepSeek request failed: %s"
+                              (error-message-string errdata))
+                      nil))))))))
+
+(defun gptel-agent--deepseek-format-date (date)
+  "Format DeepSeek result DATE for display."
+  (if (and (stringp date) (not (string-empty-p date)))
+      (string-trim
+       (replace-regexp-in-string
+        "\\+00:00\\'" " UTC"
+        (replace-regexp-in-string "T" " " date)))
+    "date unknown"))
+
+(defun gptel-agent--deepseek-clip (text limit)
+  "Return a cons of TEXT clipped to LIMIT characters and a truncation flag."
+  (if (<= (length text) limit)
+      (cons text nil)
+    (cons (concat (substring text 0 limit) "\n…(truncated)") t)))
+
+(defun gptel-agent--deepseek-format-search (query results)
+  "Format DeepSeek search RESULTS for QUERY as Markdown."
+  (if (null results)
+      (format "DeepSeek Search: no results for \"%s\".  Try a broader query, remove site:/after:/before: operators, or use English keywords."
+              query)
+    (let ((sections nil)
+          (total 0)
+          (shown 0)
+          (best-rerank 0)
+          (index 0))
+      (dolist (result results)
+        (cl-incf index)
+        (let* ((rerank (plist-get result :rerank_score))
+               (title (or (plist-get result :title) "(untitled)"))
+               (url (plist-get result :url))
+               (site (plist-get result :site_name))
+               (authority (plist-get result :authority))
+               (summary (plist-get result :summary))
+               (content (plist-get result :content))
+               (lines nil))
+          (unless (and (stringp summary) (not (string-empty-p summary)))
+            (setq summary (plist-get result :snippet)))
+          (when (numberp rerank)
+            (setq best-rerank (max best-rerank rerank)))
+          (push (format "### %d. %s" index title) lines)
+          (when (and (stringp url) (not (string-empty-p url)))
+            (push (format "URL: %s" url) lines))
+          (let ((meta nil))
+            (when (and (stringp site) (not (string-empty-p site)))
+              (push site meta))
+            (push (gptel-agent--deepseek-format-date (plist-get result :date))
+                  meta)
+            (when (and (numberp authority) (>= authority 0))
+              (push (format "authority %d/4" authority) meta))
+            (when (numberp rerank)
+              (push (format "rerank %.2f" rerank) meta))
+            (push (string-join (nreverse meta) " · ") lines))
+          (when (and (stringp summary) (not (string-empty-p summary)))
+            (push summary lines))
+          (when (and (stringp content) (not (string-empty-p content)))
+            (let ((clip (gptel-agent--deepseek-clip
+                         content gptel-agent--deepseek-max-result-chars)))
+              (push (if (cdr clip)
+                        (format "Content (truncated from %d chars; use deepseek_fetch for the full page):\n%s"
+                                (length content) (car clip))
+                      (concat "Content:\n" (car clip)))
+                    lines)))
+          (let ((section (string-join (nreverse lines) "\n")))
+            (when (<= (+ total (length section))
+                      gptel-agent--deepseek-max-total-chars)
+              (cl-incf total (length section))
+              (cl-incf shown)
+              (push section sections)))))
+      (setq sections (nreverse sections))
+      (when (< shown (length results))
+        (push (format "(Showing %d of %d results; narrow the query or increase `count' to see more.)"
+                      shown (length results))
+              sections))
+      (when (< best-rerank 1.5)
+        (push (format "Note: the best rerank score is %.2f (< 1.5), so relevance may be low.  Consider more specific keywords, English terms, or fewer search operators."
+                      best-rerank)
+              sections))
+      (concat (format "DeepSeek Search: \"%s\" (%d result%s)\n\n"
+                      query (length results)
+                      (if (= (length results) 1) "" "s"))
+              (string-join sections "\n\n")))))
+
+(defun gptel-agent--deepseek-search (callback query &optional count need-content
+                                              ori-question localization)
+  "Search the web with DeepSeek and call CALLBACK with formatted results.
+
+COUNT defaults to 10.  NEED-CONTENT requests page text for each result.
+ORI-QUESTION is the user's original question.  LOCALIZATION is an IP
+address used to prefer localized results."
+  (let ((body `((query . ,query)
+                (count . ,(or count 10))
+                (need_content . ,(if (and need-content
+                                          (not (eq need-content :json-false)))
+                                     t :json-false)))))
+    (when (and (stringp ori-question) (not (string-empty-p ori-question)))
+      (push (cons 'ori_question ori-question) body))
+    (when (and (stringp localization) (not (string-empty-p localization)))
+      (push (cons 'localization localization) body))
+    (gptel-agent--deepseek-post
+     "/v1/tools/search" body
+     (lambda (err data)
+       (if err
+           (funcall callback err)
+         (funcall callback
+                  (gptel-agent--deepseek-format-search
+                   query (plist-get data :results))))))))
+
+(defun gptel-agent--deepseek-fetch (callback url)
+  "Fetch URL with DeepSeek and call CALLBACK with its title and Markdown content."
+  (gptel-agent--deepseek-post
+   "/v1/tools/fetch" `((url . ,url))
+   (lambda (err data)
+     (if err
+         (funcall callback err)
+       (let* ((title (or (plist-get data :title) ""))
+              (content (or (plist-get data :content) "")))
+         (if (string-empty-p content)
+             (funcall callback
+                      (format "deepseek_fetch: fetched %s but no main content was extracted (title: %s).  Try another source."
+                              url (if (string-empty-p title) "none" title)))
+           (let ((clip (gptel-agent--deepseek-clip
+                        content gptel-agent--deepseek-max-total-chars)))
+             (funcall callback
+                      (concat
+                       (format "# %s\n" (if (string-empty-p title) url title))
+                       (format "Source: %s (%d chars%s)\n\n"
+                               url (length content)
+                               (if (cdr clip) ", truncated" ""))
+                       (car clip))))))))))
 
 ;;; Code tools
 ;;;; Diagnostics from flymake
@@ -1688,6 +2080,59 @@ If required, consider using the url as the input to the `Read` tool to get the c
  :async t
  :include t
  :category "gptel-agent")
+
+(gptel-make-tool
+ :name "deepseek_search"
+ :function #'gptel-agent--deepseek-search
+ :description "Search the web with DeepSeek's search engine and return ranked results.
+
+Each result includes a title, URL, publication date, site name, authority score (0-4), rerank score (0-3), a summary, and optionally the page content.  Results with a rerank score below 1.5 are flagged as low relevance.
+
+The query supports search operators:
+- site:example.com and -site:example.com
+- \"exact phrase\" and -\"exact phrase\"
+- -word (exclude a word)
+- lang:zh,en (limit by language)
+- after:2025-01-01 and before:2026-06-01 (limit by publication date)
+
+Use `deepseek_fetch' to read a promising result in full.  This tool requires a DeepSeek API key, see `gptel-agent-deepseek-api-key'."
+ :args '((:name "query"
+                :type string
+                :description "Search query, 1-128 characters.  Supports site:, -site:, -word, \"phrase\", lang:, after: and before:.")
+         (:name "count"
+                :type integer
+                :description "Number of results to return, 1-50 (default 10)."
+                :optional t)
+         (:name "need_content"
+                :type boolean
+                :description "If true, include page body text in each result's content field.  Defaults to false; costs more tokens."
+                :optional t)
+         (:name "ori_question"
+                :type string
+                :description "The user's original question (1-128 characters), used to better understand search intent.  Optional."
+                :optional t)
+         (:name "localization"
+                :type string
+                :description "IP address used to prefer localized results.  Rarely needed."
+                :optional t))
+ :category "gptel-agent"
+ :async t
+ :include t)
+
+(gptel-make-tool
+ :name "deepseek_fetch"
+ :function #'gptel-agent--deepseek-fetch
+ :description "Fetch a single web page through DeepSeek and return its title and main content as Markdown.
+
+Use this instead of curl when you need readable text, especially for JavaScript-heavy pages.  The page is fetched by DeepSeek's servers, not locally.  Requires a DeepSeek API key, see `gptel-agent-deepseek-api-key'.
+
+Returns an error string if the page cannot be fetched or no main content can be extracted."
+ :args '(( :name "url"
+           :type string
+           :description "Absolute http(s) URL with a host, up to 8192 characters, without embedded credentials."))
+ :category "gptel-agent"
+ :async t
+ :include t)
 
 (gptel-make-tool
  :name "Diagnostics"

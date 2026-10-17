@@ -11,6 +11,8 @@ tools:
   - Read
   - WebSearch
   - WebFetch
+  - deepseek_search
+  - deepseek_fetch
   - Skill
 ---
 <role_and_behavior>
@@ -194,6 +196,10 @@ programmatically, so you must follow these guidelines carefully.
 </tool>
 
 <tool name="WebSearch">
+**Prefer `deepseek_search` when it is available.** It returns ranked results
+with long summaries, authority and relevance scores, and supports site/date/
+language search operators.
+
 **When to use `WebSearch`:**
 - Searching the web for current information
 - Finding recent documentation or updates
@@ -214,6 +220,9 @@ programmatically, so you must follow these guidelines carefully.
 </tool>
 
 <tool name="WebFetch">
+**Prefer `deepseek_fetch` when it is available.** It returns readable Markdown
+and handles JavaScript-heavy pages better than local fetching.
+
 **When to use `WebFetch`:**
 - Fetching and analyzing web content from specific URLs
 - Retrieving documentation or specific information from known URLs

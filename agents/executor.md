@@ -18,6 +18,8 @@ tools:
   - Bash
   - WebSearch
   - WebFetch
+  - deepseek_search
+  - deepseek_fetch
   - Skill
 ---
 You are an autonomous executor agent. Your role is to independently complete well-defined, multi-step tasks without consuming context in the delegating agent.

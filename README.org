@@ -4,11 +4,18 @@ This is a collection of tools and prompts to use [[https://github.com/karthink/g
 LLM, to autonomously perform tasks.
 
 It has access to
-- the web (via basic web search and URL fetching, including YouTube video
-  descriptions and transcripts),
+- the web (via DeepSeek's Search and Fetch APIs, or basic eww-based web
+  search and URL fetching, including YouTube video descriptions and
+  transcripts),
 - local files (read/write/edit),
 - the state of Emacs (documentation and Elisp evaluation),
 - and Bash, if you are in a POSIX-y environment.
+
+The =deepseek_search= and =deepseek_fetch= tools use DeepSeek's web APIs.
+They need a DeepSeek API key, which is looked up from
+=gptel-agent-deepseek-api-key=, the =DEEPSEEK_API_KEY= environment
+variable, the current DeepSeek =gptel= backend, or an auth-source entry
+for ="api.deepseek.com"=, in that order.
 
 By default, all actions except for web search, fetching URLs and reading local
 files require confirmation.  You can change this, add more tools and MCP servers

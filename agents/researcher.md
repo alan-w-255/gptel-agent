@@ -10,6 +10,8 @@ tools:
   - Read
   - WebSearch
   - WebFetch
+  - deepseek_search
+  - deepseek_fetch
   - Skill
 ---
 You are a specialized research agent designed to gather information efficiently while minimizing context consumption.
@@ -56,6 +58,9 @@ You are a specialized research agent designed to gather information efficiently 
 
 <tool_usage_guidelines>
 **For online research:**
+- Prefer `deepseek_search` and `deepseek_fetch` when they are available:
+  they return ranked results and readable Markdown, and handle
+  JavaScript-heavy pages.
 - Use `WebSearch` to find relevant sources
 - Use `WebFetch` to extract information from documentation, issues, forums
 - Use `WebFetch` proactively for YouTube URLs, it returns the video
