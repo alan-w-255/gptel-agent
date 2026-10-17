@@ -12,6 +12,12 @@
   ~gptel-agent-deepseek-api-key~ and ~gptel-agent-deepseek-api-base~
   for configuration.
 
+- New ~gptel-qa~ preset for question answering.  It is restricted to
+  read-only web access via ~WebSearch~ and ~WebFetch~, and is prompted
+  to answer with a direct conclusion first, followed by a layered
+  explanation and cited sources.  Apply the ~gptel-qa~ preset from
+  gptel's menu, or include ~@gptel-qa~ in a prompt.
+
 - gptel-agent now works over TRAMP.  This means it can run processes on
   remote servers, grep and edit files and so on without the need to
   install Emacs or an agent harness.  This involves calling command line

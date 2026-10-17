@@ -98,6 +98,10 @@ There are two ways to use gptel-agent:
   planning preset has read-only access to the filesystem and is instructed to
   create a systematic plan of action.
 
+- The =gptel-qa= preset is a read-only question-answering configuration.
+  Apply it from gptel's menu, or include =@gptel-qa= in a prompt.  See
+  [[*The Q&A preset][The Q&A preset]] below.
+
 **** Anywhere in Emacs
 
 Place =(gptel-agent-update)= in your config.
@@ -125,6 +129,20 @@ consisting of
 gptel uses the term "preset" for such configurations.  A preset can specify the above and any other behavior, such as the model used, API call parameters and so on.
 
 =gptel-agent= is implemented as a preset for gptel and can be modified/extended easily.
+
+*** The Q&A preset
+
+The =gptel-qa= preset is a read-only question-answering configuration.  It has
+access to the web through =WebSearch= and =WebFetch=, but no
+filesystem or shell tools.  Its system prompt asks it to:
+
+- lead with a direct answer, then explain the reasoning and details in layers;
+- adapt the length and structure to the complexity of the question;
+- search when information may be outdated, contested or needs verification, and
+  cite the sources it actually read.
+
+Apply the =gptel-qa= preset from gptel's menu, or include =@gptel-qa= in a
+prompt.
 
 *** Using sub-agents
 

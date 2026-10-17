@@ -53,6 +53,10 @@
 ;; - As with gptel, you can use gptel-agent in any buffer.  Just apply the
 ;;   "gptel-agent" preset in the buffer, or include "@gptel-agent" in a prompt.
 ;;
+;; - The `gptel-qa' preset is a read-only question-answering configuration
+;;   with web access via the `WebSearch' and `WebFetch' tools.  Apply it from
+;;   gptel's menu, or include "@gptel-qa" in a prompt.
+;;
 ;; gptel-agent can delegate tasks to "sub-agents".  Sub-agents can be specified
 ;; in Markdown or Org files in a directory.  To see how to specify agents,
 ;; examine the "agents" directory in this package.  You can add your directory
@@ -164,6 +168,9 @@ Alist mapping agent names to a plist of agent properties.")
 The key is the name.  The value is a cons (LOCATION . SKILL-PLIST).
 LOCATION is path to the skill's directory.  SKILL-PLIST is the header
 of the corresponding SKILL.md as a plist.")
+
+(defconst gptel-agent--top-level-agents '("gptel-agent" "gptel-plan" "gptel-qa")
+  "Agent definitions exposed as top-level gptel presets.")
 
 ;;;###autoload
 (defun gptel-agent-read-file (agent-file &optional templates metadata-only)
@@ -278,8 +285,7 @@ AGENT-SKILLS is a alist of skill names and associated plist as value
              (agents-list-str
               (cl-loop for entry in gptel-agent--agents
                        unless (or (string= (car entry) name)
-                                  (string= (car entry) "gptel-agent")
-                                  (string= (car entry) "gptel-plan"))
+                                  (member (car entry) gptel-agent--top-level-agents))
                        collect (format "`%s`: %s\n"
                                        (car entry) (plist-get (cdr entry) :description))
                        into agent-list
@@ -296,11 +302,10 @@ AGENT-SKILLS is a alist of skill names and associated plist as value
   (setf (plist-get (car (gptel-tool-args (gptel-get-tool "Agent"))) :enum)
         (vconcat (delete "gptel-agent" (mapcar #'car gptel-agent--agents))))
 
-  ;; Apply gptel-agent preset if it exists
-  (when-let* ((gptel-agent-plist (assoc-default "gptel-agent" gptel-agent--agents nil nil)))
-    (apply #'gptel-make-preset 'gptel-agent gptel-agent-plist))
-  (when-let* ((gptel-plan-plist (assoc-default "gptel-plan" gptel-agent--agents nil nil)))
-    (apply #'gptel-make-preset 'gptel-plan gptel-plan-plist))
+  ;; Register the top-level agent presets if they exist
+  (dolist (agent-name gptel-agent--top-level-agents)
+    (when-let* ((agent-plist (assoc-default agent-name gptel-agent--agents nil nil)))
+      (apply #'gptel-make-preset (intern agent-name) agent-plist)))
   gptel-agent--agents)
 
 ;;; Sub-agent definition parsers for Markdown and Org
